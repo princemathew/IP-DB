@@ -1,0 +1,32 @@
+//Provide IP's to be searched here
+//Uploading a list as watchlist is also an option
+let IPs = datatable(ip:string)
+[
+  '2a01:cb04:946:8a00:7a:67ff:fe16:9972',
+  '2001:4ba0:cafe:15fd::1',
+  '2604:a880:400:d0::1d3f:1',
+  '217.25.176.25',
+  '5.8.1.2',   
+  '192.165.12.17',
+];
+//Fetching IP data
+//Using Azure Storage is the best option
+let ASN = externaldata(network:string, asn:string, organisation:string)
+[
+  @"https://raw.githubusercontent.com/princemathew/IP-DB/main/GeoLite2-ASN-Blocks-IPv4.csv",
+  @"https://raw.githubusercontent.com/princemathew/IP-DB/main/GeoLite2-ASN-Blocks-IPv6.csv"
+]
+with(ignoreFirstRecord=true,format="csv")
+| extend ipv6 = iff(network contains ":",split(network,"/")[0],"")
+| extend prefix = iff(network contains ":",split(network,"/")[1],"")
+| extend network = iff(network contains ":",parse_ipv6_mask(ipv6,toint(prefix)),network);
+//Checking IPV4 addresses
+let IPV4_Match = IPs
+| where ip !contains ":"
+| evaluate ipv4_lookup(ASN, ip, network)
+| project ip,asn,organisation;
+//Checking IPV6 addresses
+let IPV6_Match = (ASN| where network contains ":"| extend dummy = 1) | join kind=inner  (IPs | where ip contains ":" | extend dummy=1)on dummy
+| where network contains parse_ipv6_mask(ip,toint(prefix))
+| project ip,asn,organisation;
+IPV4_Match | union IPV6_Match
